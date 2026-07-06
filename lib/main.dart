@@ -120,66 +120,67 @@ class _WeatherAppState extends State<WeatherApp> {
               ),
               child: Padding(
                 padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.lock_outline,
-                      size: 48,
-                      color: Colors.white,
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Welcome back',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 520),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Icon(
+                        Icons.lock_outline,
+                        size: 48,
                         color: Colors.white,
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Sign in or create an account to continue',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 15, color: Colors.white70),
-                    ),
-                    const SizedBox(height: 24),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton(
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Welcome back',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Sign in or create an account to continue',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 15, color: Colors.white70),
+                      ),
+                      const SizedBox(height: 24),
+                      FilledButton.icon(
                         onPressed: _handleSignIn,
+                        icon: const Icon(Icons.login, size: 20),
+                        label: const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 12),
+                          child: Text('Sign In'),
+                        ),
                         style: FilledButton.styleFrom(
                           backgroundColor: const Color(0xFF4A90E2),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 14,
-                          ),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(20),
                           ),
+                          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                         ),
-                        child: const Text('Sign In'),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton(
+                      const SizedBox(height: 12),
+                      OutlinedButton.icon(
                         onPressed: _handleSignUp,
+                        icon: const Icon(Icons.person_add, size: 20),
+                        label: const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 12),
+                          child: Text('Sign Up'),
+                        ),
                         style: OutlinedButton.styleFrom(
                           side: const BorderSide(color: Colors.white70),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 14,
-                          ),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(20),
                           ),
+                          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                         ),
-                        child: const Text('Sign Up'),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
