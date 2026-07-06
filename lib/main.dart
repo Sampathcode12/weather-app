@@ -51,24 +51,24 @@ class _WeatherAppState extends State<WeatherApp> {
     }
   }
 
-  Future<void> _handleSignIn() async {
-    if (!mounted) {
-      return;
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Sign in flow will be connected to Firebase next.')),
+  Future<void> _handleSignIn(BuildContext ctx) async {
+    if (!mounted) return;
+    ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Opening Sign In...')));
+    final result = await Navigator.push<bool>(
+      ctx,
+      MaterialPageRoute(builder: (context) => const SignInPage()),
     );
+    if (result == true && mounted) setState(() => _isSignedIn = true);
   }
 
-  Future<void> _handleSignUp() async {
-    if (!mounted) {
-      return;
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Sign up flow will be connected to Firebase next.')),
+  Future<void> _handleSignUp(BuildContext ctx) async {
+    if (!mounted) return;
+    ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Opening Sign Up...')));
+    final result = await Navigator.push<bool>(
+      ctx,
+      MaterialPageRoute(builder: (context) => const SignUpPage()),
     );
+    if (result == true && mounted) setState(() => _isSignedIn = true);
   }
 
   @override
@@ -148,37 +148,44 @@ class _WeatherAppState extends State<WeatherApp> {
                         style: TextStyle(fontSize: 15, color: Colors.white70),
                       ),
                       const SizedBox(height: 24),
-                      FilledButton.icon(
-                        onPressed: _handleSignIn,
-                        icon: const Icon(Icons.login, size: 20),
-                        label: const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 12),
-                          child: Text('Sign In'),
-                        ),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF4A90E2),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      OutlinedButton.icon(
-                        onPressed: _handleSignUp,
-                        icon: const Icon(Icons.person_add, size: 20),
-                        label: const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 12),
-                          child: Text('Sign Up'),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: Colors.white70),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                        ),
-                      ),
+                      Builder(builder: (ctx) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            FilledButton.icon(
+                              onPressed: () => _handleSignIn(ctx),
+                              icon: const Icon(Icons.login, size: 20),
+                              label: const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 12),
+                                child: Text('Sign In'),
+                              ),
+                              style: FilledButton.styleFrom(
+                                backgroundColor: const Color(0xFF4A90E2),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            OutlinedButton.icon(
+                              onPressed: () => _handleSignUp(ctx),
+                              icon: const Icon(Icons.person_add, size: 20),
+                              label: const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 12),
+                                child: Text('Sign Up'),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(color: Colors.white70),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                          ],
+                        );
+                      }),
                     ],
                   ),
                 ),
@@ -234,6 +241,206 @@ class _WeatherHomePageState extends State<WeatherHomePage> {
             label: 'History',
           ),
         ],
+      ),
+    );
+  }
+}
+
+class SignInPage extends StatefulWidget {
+  const SignInPage({super.key});
+
+  @override
+  State<SignInPage> createState() => _SignInPageState();
+}
+
+class _SignInPageState extends State<SignInPage> {
+  final _formKey = GlobalKey<FormState>();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  bool _loading = false;
+
+  Future<void> _signInWithEmail() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _loading = true);
+    try {
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+      );
+      if (mounted) Navigator.of(context).pop(true);
+    } on FirebaseAuthException catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message ?? e.code)));
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sign in failed')));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _signInWithGoogle() async {
+    setState(() => _loading = true);
+    try {
+      final googleUser = await GoogleSignIn(scopes: ['email']).signIn();
+      if (googleUser == null) return; // cancelled
+      final googleAuth = await googleUser.authentication;
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+      await FirebaseAuth.instance.signInWithCredential(credential);
+      if (mounted) Navigator.of(context).pop(true);
+    } on FirebaseAuthException catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message ?? e.code)));
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Google sign in failed')));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Sign In')),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: _emailController,
+                    decoration: const InputDecoration(labelText: 'Email'),
+                    keyboardType: TextInputType.emailAddress,
+                    validator: (v) => (v == null || v.isEmpty) ? 'Enter email' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _passwordController,
+                    decoration: const InputDecoration(labelText: 'Password'),
+                    obscureText: true,
+                    validator: (v) => (v == null || v.isEmpty) ? 'Enter password' : null,
+                  ),
+                  const SizedBox(height: 20),
+                  ElevatedButton(
+                    onPressed: _loading ? null : _signInWithEmail,
+                    child: _loading ? const CircularProgressIndicator() : const Text('Sign in with Email'),
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: _loading ? null : _signInWithGoogle,
+                    icon: const Icon(Icons.login),
+                    label: const Text('Continue with Google'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class SignUpPage extends StatefulWidget {
+  const SignUpPage({super.key});
+
+  @override
+  State<SignUpPage> createState() => _SignUpPageState();
+}
+
+class _SignUpPageState extends State<SignUpPage> {
+  final _formKey = GlobalKey<FormState>();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  bool _loading = false;
+
+  Future<void> _signUpWithEmail() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _loading = true);
+    try {
+      await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+      );
+      if (mounted) Navigator.of(context).pop(true);
+    } on FirebaseAuthException catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message ?? e.code)));
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sign up failed')));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _signUpWithGoogle() async {
+    setState(() => _loading = true);
+    try {
+      final googleUser = await GoogleSignIn(scopes: ['email']).signIn();
+      if (googleUser == null) return;
+      final googleAuth = await googleUser.authentication;
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+      await FirebaseAuth.instance.signInWithCredential(credential);
+      if (mounted) Navigator.of(context).pop(true);
+    } on FirebaseAuthException catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message ?? e.code)));
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Google sign up failed')));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Sign Up')),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: _emailController,
+                    decoration: const InputDecoration(labelText: 'Email'),
+                    keyboardType: TextInputType.emailAddress,
+                    validator: (v) => (v == null || v.isEmpty) ? 'Enter email' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _passwordController,
+                    decoration: const InputDecoration(labelText: 'Password'),
+                    obscureText: true,
+                    validator: (v) => (v == null || v.length < 6) ? 'Enter password (6+ chars)' : null,
+                  ),
+                  const SizedBox(height: 20),
+                  ElevatedButton(
+                    onPressed: _loading ? null : _signUpWithEmail,
+                    child: _loading ? const CircularProgressIndicator() : const Text('Create account'),
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: _loading ? null : _signUpWithGoogle,
+                    icon: const Icon(Icons.person_add),
+                    label: const Text('Continue with Google'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
