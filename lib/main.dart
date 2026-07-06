@@ -1,7 +1,17 @@
-﻿import 'package:flutter/material.dart';
+﻿import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  try {
+    await Firebase.initializeApp();
+  } catch (error) {
+    debugPrint('Firebase initialization skipped: $error');
+  }
+
   runApp(const WeatherApp());
 }
 
@@ -14,35 +24,64 @@ class WeatherApp extends StatefulWidget {
 
 class _WeatherAppState extends State<WeatherApp> {
   final GoogleSignIn _googleSignIn = GoogleSignIn(scopes: ['email']);
+  FirebaseAuth? _auth;
   bool _isSignedIn = false;
+  bool _isCheckingAuth = true;
 
-  Future<void> _handleGoogleSignIn() async {
+  @override
+  void initState() {
+    super.initState();
+    _restoreSession();
+  }
+
+  Future<void> _restoreSession() async {
     try {
-      final account = await _googleSignIn.signIn();
-      if (!mounted) {
-        return;
-      }
-
-      if (account != null) {
-        setState(() => _isSignedIn = true);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Google sign-in was cancelled.')),
-        );
+      _auth = FirebaseAuth.instance;
+      final currentUser = _auth?.currentUser;
+      if (mounted) {
+        setState(() {
+          _isSignedIn = currentUser != null;
+          _isCheckingAuth = false;
+        });
       }
     } catch (error) {
-      if (!mounted) {
-        return;
+      if (mounted) {
+        setState(() => _isCheckingAuth = false);
       }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to sign in with Google: $error')),
-      );
     }
+  }
+
+  Future<void> _handleSignIn() async {
+    if (!mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Sign in flow will be connected to Firebase next.')),
+    );
+  }
+
+  Future<void> _handleSignUp() async {
+    if (!mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Sign up flow will be connected to Firebase next.')),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_isCheckingAuth) {
+      return const MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: Scaffold(
+          body: Center(child: CircularProgressIndicator()),
+        ),
+      );
+    }
+
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Weather Forecast',
@@ -91,7 +130,7 @@ class _WeatherAppState extends State<WeatherApp> {
                     ),
                     const SizedBox(height: 16),
                     const Text(
-                      'Google account required',
+                      'Welcome back',
                       style: TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.w700,
@@ -100,24 +139,44 @@ class _WeatherAppState extends State<WeatherApp> {
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Sign in with your Google account to continue',
+                      'Sign in or create an account to continue',
                       textAlign: TextAlign.center,
                       style: TextStyle(fontSize: 15, color: Colors.white70),
                     ),
                     const SizedBox(height: 24),
-                    FilledButton.icon(
-                      onPressed: _handleGoogleSignIn,
-                      icon: const Icon(Icons.g_mobiledata),
-                      label: const Text('Continue with Google'),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF4A90E2),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 14,
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: _handleSignIn,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF4A90E2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 14,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
                         ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
+                        child: const Text('Sign In'),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton(
+                        onPressed: _handleSignUp,
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Colors.white70),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 14,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
                         ),
+                        child: const Text('Sign Up'),
                       ),
                     ),
                   ],

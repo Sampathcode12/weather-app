@@ -16,8 +16,9 @@ void main() {
   ) async {
     await tester.pumpWidget(const WeatherApp());
 
-    expect(find.text('Continue with Google'), findsOneWidget);
-    expect(find.text('Sign in with your Google account to continue'), findsOneWidget);
+    expect(find.text('Sign In'), findsOneWidget);
+    expect(find.text('Sign Up'), findsOneWidget);
+    expect(find.text('Sign in or create an account to continue'), findsOneWidget);
     expect(find.text('Current Location'), findsNothing);
   });
 }

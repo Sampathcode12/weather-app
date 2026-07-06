@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "501931801163",
+    "project_id": "firbase-9bfba",
+    "storage_bucket": "firbase-9bfba.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:501931801163:android:213e6cdc3850ab13f82bce",
+        "android_client_info": {
+          "package_name": "com.example.firbase"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBuBueUaSkNR6ujyNcI_I97FI8EZIIP2CA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:501931801163:android:52425877cc8cc258f82bce",
+        "android_client_info": {
+          "package_name": "com.example.weather_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBuBueUaSkNR6ujyNcI_I97FI8EZIIP2CA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
