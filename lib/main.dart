@@ -1,11 +1,45 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 void main() {
   runApp(const WeatherApp());
 }
 
-class WeatherApp extends StatelessWidget {
+class WeatherApp extends StatefulWidget {
   const WeatherApp({super.key});
+
+  @override
+  State<WeatherApp> createState() => _WeatherAppState();
+}
+
+class _WeatherAppState extends State<WeatherApp> {
+  final GoogleSignIn _googleSignIn = GoogleSignIn(scopes: ['email']);
+  bool _isSignedIn = false;
+
+  Future<void> _handleGoogleSignIn() async {
+    try {
+      final account = await _googleSignIn.signIn();
+      if (!mounted) {
+        return;
+      }
+
+      if (account != null) {
+        setState(() => _isSignedIn = true);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Google sign-in was cancelled.')),
+        );
+      }
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unable to sign in with Google: $error')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -22,7 +56,77 @@ class WeatherApp extends StatelessWidget {
         scaffoldBackgroundColor: const Color(0xFF0B1330),
         textTheme: Typography.whiteMountainView,
       ),
-      home: const WeatherHomePage(),
+      home: _isSignedIn ? const WeatherHomePage() : _buildSignInGate(),
+    );
+  }
+
+  Widget _buildSignInGate() {
+    return Scaffold(
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFF0A152F), Color(0xFF0B193E)],
+          ),
+        ),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Card(
+              color: Colors.white.withOpacity(0.08),
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.lock_outline,
+                      size: 48,
+                      color: Colors.white,
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Google account required',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Sign in with your Google account to continue',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 15, color: Colors.white70),
+                    ),
+                    const SizedBox(height: 24),
+                    FilledButton.icon(
+                      onPressed: _handleGoogleSignIn,
+                      icon: const Icon(Icons.g_mobiledata),
+                      label: const Text('Continue with Google'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF4A90E2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 14,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

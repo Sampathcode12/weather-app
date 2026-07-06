@@ -11,11 +11,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:weather_app/main.dart';
 
 void main() {
-  testWidgets('Weather app loads', (WidgetTester tester) async {
+  testWidgets('Shows Google sign-in gate before weather content', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(const WeatherApp());
 
-    expect(find.text('Current Location'), findsOneWidget);
-    expect(find.text('Search City'), findsOneWidget);
-    expect(find.text('Weather History'), findsOneWidget);
+    expect(find.text('Continue with Google'), findsOneWidget);
+    expect(find.text('Sign in with your Google account to continue'), findsOneWidget);
+    expect(find.text('Current Location'), findsNothing);
   });
 }
