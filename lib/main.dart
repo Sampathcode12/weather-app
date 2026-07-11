@@ -2,35 +2,97 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'firebase_options.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  var firebaseInitialized = false;
+  String? firebaseInitError;
   try {
-    await Firebase.initializeApp();
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    firebaseInitialized = true;
+    debugPrint('Firebase initialized successfully');
   } catch (error) {
-    debugPrint('Firebase initialization skipped: $error');
+    firebaseInitError = error.toString();
+    debugPrint('Firebase initialization failed: $firebaseInitError');
   }
 
-  runApp(const WeatherApp());
+  runApp(WeatherApp(
+    firebaseInitialized: firebaseInitialized,
+    firebaseInitError: firebaseInitError,
+  ));
 }
 
 class WeatherApp extends StatefulWidget {
-  const WeatherApp({super.key});
+  const WeatherApp({
+    super.key,
+    required this.firebaseInitialized,
+    this.firebaseInitError,
+  });
+
+  final bool firebaseInitialized;
+  final String? firebaseInitError;
 
   @override
   State<WeatherApp> createState() => _WeatherAppState();
 }
 
 class _WeatherAppState extends State<WeatherApp> {
+  static const bool skipAuthGate = true;
+
   FirebaseAuth? _auth;
   bool _isSignedIn = false;
   bool _isCheckingAuth = true;
+  bool _firebaseInitialized = false;
+  String? _firebaseInitError;
 
   @override
   void initState() {
     super.initState();
-    _restoreSession();
+    _firebaseInitialized = widget.firebaseInitialized;
+    _firebaseInitError = widget.firebaseInitError;
+    if (skipAuthGate) {
+      _isSignedIn = true;
+      _isCheckingAuth = false;
+    } else {
+      _restoreSession();
+    }
+  }
+
+  Future<void> _retryFirebaseInit() async {
+    if (!mounted) return;
+    setState(() {
+      _isCheckingAuth = true;
+      _firebaseInitialized = false;
+      _firebaseInitError = null;
+    });
+
+    try {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+      if (mounted) {
+        setState(() {
+          _firebaseInitialized = true;
+          _firebaseInitError = null;
+        });
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _firebaseInitError = error.toString();
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isCheckingAuth = false;
+        });
+      }
+    }
   }
 
   Future<void> _restoreSession() async {
@@ -52,11 +114,17 @@ class _WeatherAppState extends State<WeatherApp> {
 
   Future<void> _handleSignIn(BuildContext ctx) async {
     if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(ctx);
+    if (!_firebaseInitialized) {
+      messenger.showSnackBar(const SnackBar(
+        content: Text('Firebase is not initialized. Sign in is unavailable.'),
+      ));
+      return;
+    }
     const adminEmail = 'Admin@gmail.com';
     const adminPassword = 'Admin@123';
-    ScaffoldMessenger.of(
-      ctx,
-    ).showSnackBar(const SnackBar(content: Text('Signing in as Admin...')));
+    final navigator = Navigator.of(ctx);
+    messenger.showSnackBar(const SnackBar(content: Text('Signing in as Admin...')));
     try {
       await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: adminEmail,
@@ -65,20 +133,16 @@ class _WeatherAppState extends State<WeatherApp> {
       if (mounted) setState(() => _isSignedIn = true);
     } on FirebaseAuthException catch (e) {
       // If automatic sign-in fails, open the sign-in form so user can try manually
-      ScaffoldMessenger.of(
-        ctx,
-      ).showSnackBar(SnackBar(content: Text(e.message ?? e.code)));
-      final result = await Navigator.push<bool>(
-        ctx,
+      messenger.showSnackBar(SnackBar(content: Text(e.message ?? e.code)));
+      final result = await navigator.push<bool>(
         MaterialPageRoute(builder: (context) => const SignInPage()),
       );
       if (result == true && mounted) setState(() => _isSignedIn = true);
     } catch (e) {
-      ScaffoldMessenger.of(ctx).showSnackBar(
+      messenger.showSnackBar(
         const SnackBar(content: Text('Sign in failed, opening form...')),
       );
-      final result = await Navigator.push<bool>(
-        ctx,
+      final result = await navigator.push<bool>(
         MaterialPageRoute(builder: (context) => const SignInPage()),
       );
       if (result == true && mounted) setState(() => _isSignedIn = true);
@@ -87,11 +151,16 @@ class _WeatherAppState extends State<WeatherApp> {
 
   Future<void> _handleSignUp(BuildContext ctx) async {
     if (!mounted) return;
-    ScaffoldMessenger.of(
-      ctx,
-    ).showSnackBar(const SnackBar(content: Text('Opening Sign Up...')));
-    final result = await Navigator.push<bool>(
-      ctx,
+    final messenger = ScaffoldMessenger.of(ctx);
+    if (!_firebaseInitialized) {
+      messenger.showSnackBar(const SnackBar(
+        content: Text('Firebase is not initialized. Sign up is unavailable.'),
+      ));
+      return;
+    }
+    final navigator = Navigator.of(ctx);
+    messenger.showSnackBar(const SnackBar(content: Text('Opening Sign Up...')));
+    final result = await navigator.push<bool>(
       MaterialPageRoute(builder: (context) => const SignUpPage()),
     );
     if (result == true && mounted) setState(() => _isSignedIn = true);
@@ -124,6 +193,10 @@ class _WeatherAppState extends State<WeatherApp> {
   }
 
   Widget _buildSignInGate() {
+    if (skipAuthGate) {
+      return const WeatherHomePage();
+    }
+
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
@@ -137,7 +210,7 @@ class _WeatherAppState extends State<WeatherApp> {
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Card(
-              color: Colors.white.withOpacity(0.08),
+              color: Color.fromRGBO(255, 255, 255, 0.08),
               elevation: 0,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(24),
@@ -150,6 +223,22 @@ class _WeatherAppState extends State<WeatherApp> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      if (!_firebaseInitialized)
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          margin: const EdgeInsets.only(bottom: 8),
+                          decoration: BoxDecoration(
+                            color: const Color.fromRGBO(255, 82, 82, 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            _firebaseInitError == null
+                                ? 'Warning: Firebase not initialized. Authentication may fail.'
+                                : 'Firebase init failed: $_firebaseInitError',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: Colors.redAccent),
+                          ),
+                        ),
                       const Icon(
                         Icons.lock_outline,
                         size: 48,
@@ -178,7 +267,7 @@ class _WeatherAppState extends State<WeatherApp> {
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               FilledButton.icon(
-                                onPressed: () => _handleSignIn(ctx),
+                                onPressed: _firebaseInitialized ? () => _handleSignIn(ctx) : null,
                                 icon: const Icon(Icons.login, size: 20),
                                 label: const Padding(
                                   padding: EdgeInsets.symmetric(vertical: 12),
@@ -197,7 +286,7 @@ class _WeatherAppState extends State<WeatherApp> {
                               ),
                               const SizedBox(height: 12),
                               OutlinedButton.icon(
-                                onPressed: () => _handleSignUp(ctx),
+                                onPressed: _firebaseInitialized ? () => _handleSignUp(ctx) : null,
                                 icon: const Icon(Icons.person_add, size: 20),
                                 label: const Padding(
                                   padding: EdgeInsets.symmetric(vertical: 12),
@@ -226,6 +315,13 @@ class _WeatherAppState extends State<WeatherApp> {
           ),
         ),
       ),
+      floatingActionButton: !_firebaseInitialized
+          ? FloatingActionButton.extended(
+              onPressed: _isCheckingAuth ? null : _retryFirebaseInit,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry Firebase init'),
+            )
+          : null,
     );
   }
 }
@@ -299,20 +395,19 @@ class _SignInPageState extends State<SignInPage> {
   Future<void> _signInWithEmail() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
     try {
       await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text,
       );
-      if (mounted) Navigator.of(context).pop(true);
+      if (!mounted) return;
+      navigator.pop(true);
     } on FirebaseAuthException catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.message ?? e.code)));
+      messenger.showSnackBar(SnackBar(content: Text(e.message ?? e.code)));
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Sign in failed')));
+      messenger.showSnackBar(const SnackBar(content: Text('Sign in failed')));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -320,24 +415,26 @@ class _SignInPageState extends State<SignInPage> {
 
   Future<void> _signInWithGoogle() async {
     setState(() => _loading = true);
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
     try {
       final googleUser = await GoogleSignIn(scopes: ['email']).signIn();
-      if (googleUser == null) return; // cancelled
+      if (googleUser == null) {
+        if (mounted) setState(() => _loading = false);
+        return; // cancelled
+      }
       final googleAuth = await googleUser.authentication;
       final credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
       await FirebaseAuth.instance.signInWithCredential(credential);
-      if (mounted) Navigator.of(context).pop(true);
+      if (!mounted) return;
+      navigator.pop(true);
     } on FirebaseAuthException catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.message ?? e.code)));
+      messenger.showSnackBar(SnackBar(content: Text(e.message ?? e.code)));
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Google sign in failed')));
+      messenger.showSnackBar(const SnackBar(content: Text('Google sign in failed')));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -427,20 +524,35 @@ class _SignUpPageState extends State<SignUpPage> {
   Future<void> _signUpWithEmail() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
     try {
       await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text,
       );
-      if (mounted) Navigator.of(context).pop(true);
+      if (!mounted) return;
+      navigator.pop(true);
     } on FirebaseAuthException catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.message ?? e.code)));
+      final message = switch (e.code) {
+        'email-already-in-use' =>
+          'This email is already registered. Please sign in instead.',
+        'invalid-email' => 'Enter a valid email address.',
+        'weak-password' =>
+          'Password is too weak. Use at least 6 characters.',
+        'operation-not-allowed' =>
+          'Email/password sign-up is not enabled in Firebase.',
+        'invalid-api-key' =>
+          'Firebase API key is invalid. Check your firebase_options.dart.',
+        'network-request-failed' =>
+          'Network error. Check your internet connection.',
+        _ => e.message ?? e.code,
+      };
+      messenger.showSnackBar(SnackBar(content: Text(message)));
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Sign up failed')));
+      messenger.showSnackBar(SnackBar(
+        content: Text('Sign up failed: ${e.toString()}'),
+      ));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -448,24 +560,38 @@ class _SignUpPageState extends State<SignUpPage> {
 
   Future<void> _signUpWithGoogle() async {
     setState(() => _loading = true);
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
     try {
       final googleUser = await GoogleSignIn(scopes: ['email']).signIn();
-      if (googleUser == null) return;
+      if (googleUser == null) {
+        if (mounted) setState(() => _loading = false);
+        return;
+      }
       final googleAuth = await googleUser.authentication;
       final credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
       await FirebaseAuth.instance.signInWithCredential(credential);
-      if (mounted) Navigator.of(context).pop(true);
+      if (!mounted) return;
+      navigator.pop(true);
     } on FirebaseAuthException catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.message ?? e.code)));
+      final message = switch (e.code) {
+        'account-exists-with-different-credential' =>
+          'An account already exists with a different sign-in method.',
+        'invalid-credential' => 'Google sign-in failed. Try again.',
+        'user-disabled' => 'This account has been disabled.',
+        'operation-not-allowed' => 'Google sign-in is not enabled in Firebase.',
+        'network-request-failed' =>
+          'Network error. Check your internet connection.',
+        _ => e.message ?? e.code,
+      };
+      messenger.showSnackBar(SnackBar(content: Text(message)));
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Google sign up failed')));
+      messenger.showSnackBar(SnackBar(
+        content: Text('Google sign up failed: ${e.toString()}'),
+      ));
     } finally {
       if (mounted) setState(() => _loading = false);
     }

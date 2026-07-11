@@ -5,7 +5,6 @@
 // gestures. You can also use WidgetTester to find child widgets in the widget
 // tree, read text, and verify that the values of widget properties are correct.
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:weather_app/main.dart';
@@ -14,7 +13,7 @@ void main() {
   testWidgets('Shows Google sign-in gate before weather content', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const WeatherApp());
+    await tester.pumpWidget(const WeatherApp(firebaseInitialized: true));
 
     expect(find.text('Sign In'), findsOneWidget);
     expect(find.text('Sign Up'), findsOneWidget);

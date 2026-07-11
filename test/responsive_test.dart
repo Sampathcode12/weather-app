@@ -14,8 +14,8 @@ void main() {
     testWidgets(
       'WeatherHomePage builds at ${s.width.toInt()}x${s.height.toInt()}',
       (WidgetTester tester) async {
-        tester.binding.window.physicalSizeTestValue = s;
-        tester.binding.window.devicePixelRatioTestValue = 1.0;
+        tester.view.physicalSize = s;
+        tester.view.devicePixelRatio = 1.0;
 
         await tester.pumpWidget(const MaterialApp(home: WeatherHomePage()));
         await tester.pumpAndSettle();
@@ -26,8 +26,8 @@ void main() {
 
         // cleanup test window overrides
         addTearDown(() {
-          tester.binding.window.clearPhysicalSizeTestValue();
-          tester.binding.window.clearDevicePixelRatioTestValue();
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
         });
       },
     );
