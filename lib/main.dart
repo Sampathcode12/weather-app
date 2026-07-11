@@ -295,6 +295,7 @@ class _SignInPageState extends State<SignInPage> {
     text: 'Admin@123',
   );
   bool _loading = false;
+  bool _obscurePassword = true;
 
   Future<void> _signInWithEmail() async {
     if (!_formKey.currentState!.validate()) return;
@@ -367,8 +368,16 @@ class _SignInPageState extends State<SignInPage> {
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _passwordController,
-                    decoration: const InputDecoration(labelText: 'Password'),
-                    obscureText: true,
+                    decoration: InputDecoration(
+                      labelText: 'Password',
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                        ),
+                        onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                      ),
+                    ),
+                    obscureText: _obscurePassword,
                     validator: (v) =>
                         (v == null || v.isEmpty) ? 'Enter password' : null,
                   ),
@@ -407,6 +416,7 @@ class _SignUpPageState extends State<SignUpPage> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _loading = false;
+  bool _obscurePassword = true;
 
   Future<void> _signUpWithEmail() async {
     if (!_formKey.currentState!.validate()) return;
@@ -479,8 +489,16 @@ class _SignUpPageState extends State<SignUpPage> {
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _passwordController,
-                    decoration: const InputDecoration(labelText: 'Password'),
-                    obscureText: true,
+                    decoration: InputDecoration(
+                      labelText: 'Password',
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                        ),
+                        onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                      ),
+                    ),
+                    obscureText: _obscurePassword,
                     validator: (v) => (v == null || v.length < 6)
                         ? 'Enter password (6+ chars)'
                         : null,
