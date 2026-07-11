@@ -18,7 +18,10 @@ void main() {
 
     expect(find.text('Sign In'), findsOneWidget);
     expect(find.text('Sign Up'), findsOneWidget);
-    expect(find.text('Sign in or create an account to continue'), findsOneWidget);
+    expect(
+      find.text('Sign in or create an account to continue'),
+      findsOneWidget,
+    );
     expect(find.text('Current Location'), findsNothing);
   });
 }

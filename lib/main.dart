@@ -1,4 +1,4 @@
-﻿import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -53,17 +53,44 @@ class _WeatherAppState extends State<WeatherApp> {
 
   Future<void> _handleSignIn(BuildContext ctx) async {
     if (!mounted) return;
-    ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Opening Sign In...')));
-    final result = await Navigator.push<bool>(
+    const adminEmail = 'Admin@gmail.com';
+    const adminPassword = 'Admin@123';
+    ScaffoldMessenger.of(
       ctx,
-      MaterialPageRoute(builder: (context) => const SignInPage()),
-    );
-    if (result == true && mounted) setState(() => _isSignedIn = true);
+    ).showSnackBar(const SnackBar(content: Text('Signing in as Admin...')));
+    try {
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: adminEmail,
+        password: adminPassword,
+      );
+      if (mounted) setState(() => _isSignedIn = true);
+    } on FirebaseAuthException catch (e) {
+      // If automatic sign-in fails, open the sign-in form so user can try manually
+      ScaffoldMessenger.of(
+        ctx,
+      ).showSnackBar(SnackBar(content: Text(e.message ?? e.code)));
+      final result = await Navigator.push<bool>(
+        ctx,
+        MaterialPageRoute(builder: (context) => const SignInPage()),
+      );
+      if (result == true && mounted) setState(() => _isSignedIn = true);
+    } catch (e) {
+      ScaffoldMessenger.of(ctx).showSnackBar(
+        const SnackBar(content: Text('Sign in failed, opening form...')),
+      );
+      final result = await Navigator.push<bool>(
+        ctx,
+        MaterialPageRoute(builder: (context) => const SignInPage()),
+      );
+      if (result == true && mounted) setState(() => _isSignedIn = true);
+    }
   }
 
   Future<void> _handleSignUp(BuildContext ctx) async {
     if (!mounted) return;
-    ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Opening Sign Up...')));
+    ScaffoldMessenger.of(
+      ctx,
+    ).showSnackBar(const SnackBar(content: Text('Opening Sign Up...')));
     final result = await Navigator.push<bool>(
       ctx,
       MaterialPageRoute(builder: (context) => const SignUpPage()),
@@ -76,9 +103,7 @@ class _WeatherAppState extends State<WeatherApp> {
     if (_isCheckingAuth) {
       return const MaterialApp(
         debugShowCheckedModeBanner: false,
-        home: Scaffold(
-          body: Center(child: CircularProgressIndicator()),
-        ),
+        home: Scaffold(body: Center(child: CircularProgressIndicator())),
       );
     }
 
@@ -148,44 +173,52 @@ class _WeatherAppState extends State<WeatherApp> {
                         style: TextStyle(fontSize: 15, color: Colors.white70),
                       ),
                       const SizedBox(height: 24),
-                      Builder(builder: (ctx) {
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            FilledButton.icon(
-                              onPressed: () => _handleSignIn(ctx),
-                              icon: const Icon(Icons.login, size: 20),
-                              label: const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 12),
-                                child: Text('Sign In'),
-                              ),
-                              style: FilledButton.styleFrom(
-                                backgroundColor: const Color(0xFF4A90E2),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(20),
+                      Builder(
+                        builder: (ctx) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              FilledButton.icon(
+                                onPressed: () => _handleSignIn(ctx),
+                                icon: const Icon(Icons.login, size: 20),
+                                label: const Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 12),
+                                  child: Text('Sign In'),
                                 ),
-                                textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            OutlinedButton.icon(
-                              onPressed: () => _handleSignUp(ctx),
-                              icon: const Icon(Icons.person_add, size: 20),
-                              label: const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 12),
-                                child: Text('Sign Up'),
-                              ),
-                              style: OutlinedButton.styleFrom(
-                                side: const BorderSide(color: Colors.white70),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(20),
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: const Color(0xFF4A90E2),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  textStyle: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
-                                textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                               ),
-                            ),
-                          ],
-                        );
-                      }),
+                              const SizedBox(height: 12),
+                              OutlinedButton.icon(
+                                onPressed: () => _handleSignUp(ctx),
+                                icon: const Icon(Icons.person_add, size: 20),
+                                label: const Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 12),
+                                  child: Text('Sign Up'),
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  side: const BorderSide(color: Colors.white70),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  textStyle: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
                     ],
                   ),
                 ),
@@ -255,8 +288,12 @@ class SignInPage extends StatefulWidget {
 
 class _SignInPageState extends State<SignInPage> {
   final _formKey = GlobalKey<FormState>();
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController(
+    text: 'Admin@gmail.com',
+  );
+  final TextEditingController _passwordController = TextEditingController(
+    text: 'Admin@123',
+  );
   bool _loading = false;
 
   Future<void> _signInWithEmail() async {
@@ -269,9 +306,13 @@ class _SignInPageState extends State<SignInPage> {
       );
       if (mounted) Navigator.of(context).pop(true);
     } on FirebaseAuthException catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message ?? e.code)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message ?? e.code)));
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sign in failed')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Sign in failed')));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -290,9 +331,13 @@ class _SignInPageState extends State<SignInPage> {
       await FirebaseAuth.instance.signInWithCredential(credential);
       if (mounted) Navigator.of(context).pop(true);
     } on FirebaseAuthException catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message ?? e.code)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message ?? e.code)));
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Google sign in failed')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Google sign in failed')));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -316,19 +361,23 @@ class _SignInPageState extends State<SignInPage> {
                     controller: _emailController,
                     decoration: const InputDecoration(labelText: 'Email'),
                     keyboardType: TextInputType.emailAddress,
-                    validator: (v) => (v == null || v.isEmpty) ? 'Enter email' : null,
+                    validator: (v) =>
+                        (v == null || v.isEmpty) ? 'Enter email' : null,
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _passwordController,
                     decoration: const InputDecoration(labelText: 'Password'),
                     obscureText: true,
-                    validator: (v) => (v == null || v.isEmpty) ? 'Enter password' : null,
+                    validator: (v) =>
+                        (v == null || v.isEmpty) ? 'Enter password' : null,
                   ),
                   const SizedBox(height: 20),
                   ElevatedButton(
                     onPressed: _loading ? null : _signInWithEmail,
-                    child: _loading ? const CircularProgressIndicator() : const Text('Sign in with Email'),
+                    child: _loading
+                        ? const CircularProgressIndicator()
+                        : const Text('Sign in with Email'),
                   ),
                   const SizedBox(height: 12),
                   OutlinedButton.icon(
@@ -369,9 +418,13 @@ class _SignUpPageState extends State<SignUpPage> {
       );
       if (mounted) Navigator.of(context).pop(true);
     } on FirebaseAuthException catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message ?? e.code)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message ?? e.code)));
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sign up failed')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Sign up failed')));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -390,9 +443,13 @@ class _SignUpPageState extends State<SignUpPage> {
       await FirebaseAuth.instance.signInWithCredential(credential);
       if (mounted) Navigator.of(context).pop(true);
     } on FirebaseAuthException catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message ?? e.code)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message ?? e.code)));
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Google sign up failed')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Google sign up failed')));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -416,19 +473,24 @@ class _SignUpPageState extends State<SignUpPage> {
                     controller: _emailController,
                     decoration: const InputDecoration(labelText: 'Email'),
                     keyboardType: TextInputType.emailAddress,
-                    validator: (v) => (v == null || v.isEmpty) ? 'Enter email' : null,
+                    validator: (v) =>
+                        (v == null || v.isEmpty) ? 'Enter email' : null,
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _passwordController,
                     decoration: const InputDecoration(labelText: 'Password'),
                     obscureText: true,
-                    validator: (v) => (v == null || v.length < 6) ? 'Enter password (6+ chars)' : null,
+                    validator: (v) => (v == null || v.length < 6)
+                        ? 'Enter password (6+ chars)'
+                        : null,
                   ),
                   const SizedBox(height: 20),
                   ElevatedButton(
                     onPressed: _loading ? null : _signUpWithEmail,
-                    child: _loading ? const CircularProgressIndicator() : const Text('Create account'),
+                    child: _loading
+                        ? const CircularProgressIndicator()
+                        : const Text('Create account'),
                   ),
                   const SizedBox(height: 12),
                   OutlinedButton.icon(
@@ -815,7 +877,9 @@ class HomeScreen extends StatelessWidget {
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(28),
                   color: Color.fromRGBO(255, 255, 255, 0.08),
-                  border: Border.all(color: Color.fromRGBO(255, 255, 255, 0.08)),
+                  border: Border.all(
+                    color: Color.fromRGBO(255, 255, 255, 0.08),
+                  ),
                 ),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1129,7 +1193,9 @@ class SearchScreen extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: Color.fromRGBO(255, 255, 255, 0.06),
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Color.fromRGBO(255, 255, 255, 0.08)),
+                      border: Border.all(
+                        color: Color.fromRGBO(255, 255, 255, 0.08),
+                      ),
                     ),
                     child: ListTile(
                       title: Text(
@@ -1224,7 +1290,9 @@ class HistoryScreen extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: Color.fromRGBO(255, 255, 255, 0.07),
                     borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: Color.fromRGBO(255, 255, 255, 0.08)),
+                    border: Border.all(
+                      color: Color.fromRGBO(255, 255, 255, 0.08),
+                    ),
                   ),
                   child: Row(
                     children: [
@@ -1283,4 +1351,3 @@ class HistoryScreen extends StatelessWidget {
     );
   }
 }
-

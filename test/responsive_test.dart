@@ -11,23 +11,25 @@ void main() {
   ];
 
   for (final s in sizes) {
-    testWidgets('WeatherHomePage builds at ${s.width.toInt()}x${s.height.toInt()}',
-        (WidgetTester tester) async {
-      tester.binding.window.physicalSizeTestValue = s;
-      tester.binding.window.devicePixelRatioTestValue = 1.0;
+    testWidgets(
+      'WeatherHomePage builds at ${s.width.toInt()}x${s.height.toInt()}',
+      (WidgetTester tester) async {
+        tester.binding.window.physicalSizeTestValue = s;
+        tester.binding.window.devicePixelRatioTestValue = 1.0;
 
-      await tester.pumpWidget(const MaterialApp(home: WeatherHomePage()));
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(const MaterialApp(home: WeatherHomePage()));
+        await tester.pumpAndSettle();
 
-      // Basic sanity checks: main header and bottom navigation exist
-      expect(find.text('Current Location'), findsOneWidget);
-      expect(find.byType(NavigationBar), findsOneWidget);
+        // Basic sanity checks: main header and bottom navigation exist
+        expect(find.text('Current Location'), findsOneWidget);
+        expect(find.byType(NavigationBar), findsOneWidget);
 
-      // cleanup test window overrides
-      addTearDown(() {
-        tester.binding.window.clearPhysicalSizeTestValue();
-        tester.binding.window.clearDevicePixelRatioTestValue();
-      });
-    });
+        // cleanup test window overrides
+        addTearDown(() {
+          tester.binding.window.clearPhysicalSizeTestValue();
+          tester.binding.window.clearDevicePixelRatioTestValue();
+        });
+      },
+    );
   }
 }
