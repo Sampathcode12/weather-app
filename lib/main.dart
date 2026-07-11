@@ -23,7 +23,6 @@ class WeatherApp extends StatefulWidget {
 }
 
 class _WeatherAppState extends State<WeatherApp> {
-  final GoogleSignIn _googleSignIn = GoogleSignIn(scopes: ['email']);
   FirebaseAuth? _auth;
   bool _isSignedIn = false;
   bool _isCheckingAuth = true;
@@ -345,6 +344,13 @@ class _SignInPageState extends State<SignInPage> {
   }
 
   @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Sign In')),
@@ -463,6 +469,13 @@ class _SignUpPageState extends State<SignUpPage> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
   }
 
   @override
