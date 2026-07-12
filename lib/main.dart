@@ -1,7 +1,11 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:http/http.dart' as http;
 import 'firebase_options.dart';
 
 Future<void> main() async {
@@ -335,12 +339,26 @@ class WeatherHomePage extends StatefulWidget {
 
 class _WeatherHomePageState extends State<WeatherHomePage> {
   int _currentIndex = 0;
+  String _selectedCity = 'San Francisco, CA';
+  DateTime _selectedCityUpdatedAt = DateTime.now();
 
-  static const List<Widget> _pages = <Widget>[
-    HomeScreen(),
-    SearchScreen(),
-    HistoryScreen(),
-  ];
+  List<Widget> get _pages => <Widget>[
+        HomeScreen(
+          city: _selectedCity,
+          updatedAt: _selectedCityUpdatedAt,
+          onSearchCity: () => setState(() => _currentIndex = 1),
+        ),
+        SearchScreen(onLocationSelected: _onLocationSelected),
+        const HistoryScreen(),
+      ];
+
+  void _onLocationSelected(String city) {
+    setState(() {
+      _selectedCity = city;
+      _selectedCityUpdatedAt = DateTime.now();
+      _currentIndex = 0;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -666,7 +684,16 @@ class _SignUpPageState extends State<SignUpPage> {
 }
 
 class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({
+    super.key,
+    required this.city,
+    required this.updatedAt,
+    required this.onSearchCity,
+  });
+
+  final String city;
+  final DateTime updatedAt;
+  final VoidCallback onSearchCity;
 
   static const details = [
     {'label': 'Humidity', 'value': '72%', 'icon': Icons.water_drop},
@@ -697,6 +724,13 @@ class HomeScreen extends StatelessWidget {
       'Saturday',
     ][now.weekday - 1];
     return '$weekday · ${now.month}/${now.day}/${now.year}';
+  }
+
+  String get _formattedUpdateTime {
+    final hour = updatedAt.hour == 0 ? 12 : (updatedAt.hour > 12 ? updatedAt.hour - 12 : updatedAt.hour);
+    final minute = updatedAt.minute.toString().padLeft(2, '0');
+    final period = updatedAt.hour >= 12 ? 'PM' : 'AM';
+    return 'Updated today · $hour:$minute $period';
   }
 
   @override
@@ -745,19 +779,19 @@ class HomeScreen extends StatelessWidget {
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
+                children: [
                   Text(
-                    'San Francisco, CA',
-                    style: TextStyle(
+                    city,
+                    style: const TextStyle(
                       fontSize: 28,
                       fontWeight: FontWeight.w700,
                       color: Colors.white,
                     ),
                   ),
-                  SizedBox(height: 4),
+                  const SizedBox(height: 4),
                   Text(
-                    'Updated today · 9:45 AM',
-                    style: TextStyle(fontSize: 14, color: Colors.white60),
+                    _formattedUpdateTime,
+                    style: const TextStyle(fontSize: 14, color: Colors.white60),
                   ),
                 ],
               ),
@@ -773,39 +807,47 @@ class HomeScreen extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        _actionButton(context, Icons.gps_fixed, 'Auto GPS'),
-        _actionButton(context, Icons.search, 'Search City'),
+        _actionButton(context, Icons.gps_fixed, 'Auto GPS', null),
+        _actionButton(context, Icons.search, 'Search City', onSearchCity),
       ],
     );
   }
 
-  Widget _actionButton(BuildContext context, IconData icon, String label) {
+  Widget _actionButton(
+    BuildContext context,
+    IconData icon,
+    String label,
+    VoidCallback? onTap,
+  ) {
     return Expanded(
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 4),
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
-        decoration: BoxDecoration(
-          color: Color.fromRGBO(255, 255, 255, 0.08),
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: Color.fromRGBO(255, 255, 255, 0.08)),
-          boxShadow: [
-            BoxShadow(
-              color: Color.fromRGBO(0, 0, 0, 0.22),
-              blurRadius: 18,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Column(
-          children: [
-            Icon(icon, color: Theme.of(context).colorScheme.primary, size: 24),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 12, color: Colors.white70),
-            ),
-          ],
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 4),
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
+          decoration: BoxDecoration(
+            color: Color.fromRGBO(255, 255, 255, 0.08),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: Color.fromRGBO(255, 255, 255, 0.08)),
+            boxShadow: [
+              BoxShadow(
+                color: Color.fromRGBO(0, 0, 0, 0.22),
+                blurRadius: 18,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              Icon(icon, color: Theme.of(context).colorScheme.primary, size: 24),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 12, color: Colors.white70),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1251,11 +1293,137 @@ class _TrendPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-class SearchScreen extends StatelessWidget {
-  const SearchScreen({super.key});
+class SearchScreen extends StatefulWidget {
+  const SearchScreen({
+    super.key,
+    required this.onLocationSelected,
+  });
 
-  static const recentLocations = ['New York', 'London', 'Tokyo'];
-  static const suggestions = ['Paris', 'Los Angeles', 'Sydney', 'Mumbai'];
+  final ValueChanged<String> onLocationSelected;
+
+  static const recentLocations = [
+    'New York, USA',
+    'London, United Kingdom',
+    'Tokyo, Japan',
+  ];
+  static const suggestions = [
+    'Paris, France',
+    'Los Angeles, USA',
+    'Sydney, Australia',
+    'Mumbai, India',
+    'Berlin, Germany',
+    'Toronto, Canada',
+    'Cape Town, South Africa',
+    'Seoul, South Korea',
+  ];
+
+  @override
+  State<SearchScreen> createState() => _SearchScreenState();
+}
+
+class _SearchScreenState extends State<SearchScreen> {
+  final TextEditingController _searchController = TextEditingController();
+  String _query = '';
+  bool _isSearching = false;
+  String? _searchError;
+  List<String> _searchResults = [];
+  Timer? _debounce;
+
+  Future<void> _searchLocations() async {
+    final query = _searchController.text.trim();
+    if (query.isEmpty || query.length < 2) {
+      setState(() {
+        _searchResults = [];
+        _searchError = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _query = query;
+      _isSearching = true;
+      _searchError = null;
+      _searchResults = [];
+    });
+
+    try {
+      final uri = Uri.https(
+        'nominatim.openstreetmap.org',
+        '/search',
+        {
+          'q': query,
+          'format': 'json',
+          'limit': '20',
+          'addressdetails': '1',
+        },
+      );
+      final response = await http.get(
+        uri,
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'weather-app/1.0 (contact: example@example.com)',
+        },
+      );
+      if (response.statusCode != 200) {
+        throw Exception('Unexpected status code ${response.statusCode}');
+      }
+      final data = jsonDecode(response.body) as List<dynamic>;
+      final results = data
+          .whereType<Map<String, dynamic>>()
+          .map((item) {
+            final displayName = item['display_name'] as String?;
+            final placeType = item['type'] as String?;
+            if (displayName == null) return null;
+            return placeType == null
+                ? displayName
+                : '$displayName (${placeType.toUpperCase()})';
+          })
+          .whereType<String>()
+          .toList();
+      setState(() {
+        _searchResults = results;
+      });
+    } catch (error) {
+      setState(() {
+        _searchError = 'Search failed: ${error.toString()}';
+      });
+    } finally {
+      setState(() => _isSearching = false);
+    }
+  }
+
+  void _selectLocation(String location) {
+    widget.onLocationSelected(location);
+  }
+
+  void _onSearchQueryChanged(String value) {
+    _debounce?.cancel();
+    setState(() {
+      _query = value;
+      _searchError = null;
+    });
+
+    if (value.trim().length < 2) {
+      setState(() {
+        _searchResults = [];
+        _isSearching = false;
+      });
+      return;
+    }
+
+    _debounce = Timer(const Duration(milliseconds: 500), () {
+      if (mounted) {
+        _searchLocations();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1272,7 +1440,7 @@ class SearchScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Search City',
+            'Search City or Country',
             style: TextStyle(
               fontSize: 28,
               fontWeight: FontWeight.w800,
@@ -1281,7 +1449,7 @@ class SearchScreen extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           const Text(
-            'Find weather for any location quickly',
+            'Find weather for any city or country quickly',
             style: TextStyle(fontSize: 14, color: Colors.white70),
           ),
           const SizedBox(height: 24),
@@ -1291,60 +1459,80 @@ class SearchScreen extends StatelessWidget {
               borderRadius: BorderRadius.circular(24),
               border: Border.all(color: Color.fromRGBO(255, 255, 255, 0.1)),
             ),
-            child: const TextField(
-              style: TextStyle(color: Colors.white),
+            child: TextField(
+              controller: _searchController,
+              style: const TextStyle(color: Colors.white),
               cursorColor: Colors.white,
               decoration: InputDecoration(
-                prefixIcon: Icon(Icons.search, color: Colors.white70),
-                hintText: 'Search city name',
-                hintStyle: TextStyle(color: Colors.white54),
+                prefixIcon: const Icon(Icons.search, color: Colors.white70),
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.send, color: Colors.white70),
+                  onPressed: _searchLocations,
+                ),
+                hintText: 'Search city or country',
+                hintStyle: const TextStyle(color: Colors.white54),
                 border: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(vertical: 18),
+                contentPadding: const EdgeInsets.symmetric(vertical: 18),
+              ),
+              onChanged: _onSearchQueryChanged,
+              onSubmitted: (_) => _searchLocations(),
+            ),
+          ),
+          const SizedBox(height: 24),
+          if (_searchError != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: Text(
+                _searchError!,
+                style: const TextStyle(color: Colors.redAccent),
               ),
             ),
-          ),
-          const SizedBox(height: 28),
-          const Text(
-            'Recent locations',
-            style: TextStyle(
-              color: Colors.white70,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
+          if (_isSearching)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 16),
+              child: Center(child: CircularProgressIndicator()),
             ),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: recentLocations
-                .map(
-                  (location) => Chip(
-                    label: Text(
-                      location,
-                      style: const TextStyle(color: Colors.white),
-                    ),
-                    backgroundColor: Color.fromRGBO(255, 255, 255, 0.08),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 8,
+          Expanded(
+            child: ListView(
+              children: [
+                if (_query.isEmpty) ...[
+                  const Text(
+                    'Recent locations',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                )
-                .toList(),
-          ),
-          const SizedBox(height: 28),
-          const Text(
-            'Suggested cities',
-            style: TextStyle(
-              color: Colors.white70,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Column(
-            children: suggestions
-                .map(
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: SearchScreen.recentLocations
+                        .map(
+                          (location) => ActionChip(
+                            label: Text(
+                              location,
+                              style: const TextStyle(color: Colors.white),
+                            ),
+                            backgroundColor: Color.fromRGBO(255, 255, 255, 0.08),
+                            onPressed: () => _selectLocation(location),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                  const SizedBox(height: 28),
+                  const Text(
+                    'Suggested cities',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                ..._searchResults.map(
                   (city) => Container(
                     margin: const EdgeInsets.only(bottom: 12),
                     decoration: BoxDecoration(
@@ -1355,6 +1543,7 @@ class SearchScreen extends StatelessWidget {
                       ),
                     ),
                     child: ListTile(
+                      onTap: () => _selectLocation(city),
                       title: Text(
                         city,
                         style: const TextStyle(color: Colors.white),
@@ -1365,8 +1554,21 @@ class SearchScreen extends StatelessWidget {
                       ),
                     ),
                   ),
-                )
-                .toList(),
+                ),
+                if (_query.isNotEmpty && !_isSearching && _searchResults.isEmpty)
+                  Container(
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: Color.fromRGBO(255, 255, 255, 0.06),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Text(
+                      'No matching locations found.',
+                      style: TextStyle(color: Colors.white70),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ],
       ),
