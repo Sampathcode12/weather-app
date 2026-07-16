@@ -95,7 +95,7 @@ class _WeatherAppState extends State<WeatherApp> {
         scaffoldBackgroundColor: const Color(0xFF0B1330),
         textTheme: Typography.whiteMountainView,
       ),
-      home: _isSignedIn ? const WeatherHomePage() : _buildSignInGate(),
+      home: const WeatherHomePage(),
     );
   }
 
