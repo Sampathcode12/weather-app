@@ -2,6 +2,7 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:geolocator/geolocator.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -239,8 +240,14 @@ class _WeatherHomePageState extends State<WeatherHomePage> {
   }
 }
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  bool _locatingGps = false;
 
   static const details = [
     {'label': 'Humidity', 'value': '72%', 'icon': Icons.water_drop},
@@ -271,6 +278,98 @@ class HomeScreen extends StatelessWidget {
       'Saturday',
     ][now.weekday - 1];
     return '$weekday · ${now.month}/${now.day}/${now.year}';
+  }
+
+    Future<void> _handleAutoGps() async {
+    if (_locatingGps) return;
+    setState(() => _locatingGps = true);
+
+    try {
+      // 1. Check if device location service (GPS) is turned on.
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        if (!mounted) return;
+        final shouldOpenSettings = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Turn on location'),
+            content: const Text(
+              'Location services are off. Turn them on to detect your city automatically.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Open Settings'),
+              ),
+            ],
+          ),
+        );
+
+        if (shouldOpenSettings == true) {
+          await Geolocator.openLocationSettings();
+        }
+        setState(() => _locatingGps = false);
+        return;
+      }
+
+      // 2. Check / request permission.
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Location permission denied.')),
+            );
+          }
+          setState(() => _locatingGps = false);
+          return;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Location permission permanently denied. Enable it from app settings.',
+              ),
+            ),
+          );
+        }
+        setState(() => _locatingGps = false);
+        return;
+      }
+
+      // 3. Get current position.
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Location: ${position.latitude.toStringAsFixed(3)}, ${position.longitude.toStringAsFixed(3)}',
+            ),
+          ),
+        );
+        // TODO: use position.latitude / position.longitude to fetch
+        // weather for the user's actual location and update the UI.
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not get location: $error')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _locatingGps = false);
+    }
   }
 
   @override
@@ -343,47 +442,65 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildLocationActions(BuildContext context) {
+   Widget _buildLocationActions(BuildContext context) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        _actionButton(context, Icons.gps_fixed, 'Auto GPS'),
+        _actionButton(
+          context,
+          _locatingGps ? Icons.hourglass_top : Icons.gps_fixed,
+          _locatingGps ? 'Locating…' : 'Auto GPS',
+          onTap: _handleAutoGps,
+        ),
         _actionButton(context, Icons.search, 'Search City'),
       ],
     );
   }
 
-  Widget _actionButton(BuildContext context, IconData icon, String label) {
-    return Expanded(
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 4),
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
-        decoration: BoxDecoration(
-          color: Color.fromRGBO(255, 255, 255, 0.08),
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: Color.fromRGBO(255, 255, 255, 0.08)),
-          boxShadow: [
-            BoxShadow(
-              color: Color.fromRGBO(0, 0, 0, 0.22),
-              blurRadius: 18,
-              offset: const Offset(0, 8),
+  Widget _actionButton(
+  BuildContext context,
+  IconData icon,
+  String label, {
+  VoidCallback? onTap,
+}) {
+  return Expanded(
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(22),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
+          decoration: BoxDecoration(
+            color: const Color.fromRGBO(255, 255, 255, 0.08),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: const Color.fromRGBO(255, 255, 255, 0.08),
             ),
-          ],
-        ),
-        child: Column(
-          children: [
-            Icon(icon, color: Theme.of(context).colorScheme.primary, size: 24),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 12, color: Colors.white70),
-            ),
-          ],
+          ),
+          child: Column(
+            children: [
+              Icon(
+                icon,
+                color: Theme.of(context).colorScheme.primary,
+                size: 24,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Colors.white70,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildCurrentWeatherCard() {
     return Container(
@@ -469,7 +586,7 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _metricTile(String label, String value) {
+ Widget _metricTile(String label, String value) {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.all(14),
@@ -500,7 +617,7 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildWeatherDetails() {
+    Widget _buildWeatherDetails() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
