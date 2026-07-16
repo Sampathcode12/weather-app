@@ -3,6 +3,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart' as geo;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -248,6 +249,8 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   bool _locatingGps = false;
+  String _currentCity = "Detecting...";
+  String _lastUpdated = "";
 
   static const details = [
     {'label': 'Humidity', 'value': '72%', 'icon': Icons.water_drop},
@@ -281,96 +284,104 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
     Future<void> _handleAutoGps() async {
-    if (_locatingGps) return;
-    setState(() => _locatingGps = true);
+  if (_locatingGps) return;
 
-    try {
-      // 1. Check if device location service (GPS) is turned on.
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
-        if (!mounted) return;
-        final shouldOpenSettings = await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Turn on location'),
-            content: const Text(
-              'Location services are off. Turn them on to detect your city automatically.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Open Settings'),
-              ),
-            ],
-          ),
-        );
+  setState(() {
+    _locatingGps = true;
+  });
 
-        if (shouldOpenSettings == true) {
-          await Geolocator.openLocationSettings();
-        }
-        setState(() => _locatingGps = false);
-        return;
+  try {
+    // Check whether GPS is enabled
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+
+    if (!serviceEnabled) {
+      await Geolocator.openLocationSettings();
+
+      // Wait until the user turns GPS on
+      while (!await Geolocator.isLocationServiceEnabled()) {
+        await Future.delayed(const Duration(seconds: 1));
       }
+    }
 
-      // 2. Check / request permission.
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Location permission denied.')),
-            );
-          }
-          setState(() => _locatingGps = false);
-          return;
-        }
-      }
+    // Check permission
+    LocationPermission permission = await Geolocator.checkPermission();
 
-      if (permission == LocationPermission.deniedForever) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Location permission permanently denied. Enable it from app settings.',
-              ),
-            ),
-          );
-        }
-        setState(() => _locatingGps = false);
-        return;
-      }
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
 
-      // 3. Get current position.
-      final position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-      );
+    if (permission == LocationPermission.denied) {
+      throw Exception("Location permission denied.");
+    }
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Location: ${position.latitude.toStringAsFixed(3)}, ${position.longitude.toStringAsFixed(3)}',
-            ),
-          ),
-        );
-        // TODO: use position.latitude / position.longitude to fetch
-        // weather for the user's actual location and update the UI.
-      }
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not get location: $error')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _locatingGps = false);
+    if (permission == LocationPermission.deniedForever) {
+      throw Exception(
+          "Location permission permanently denied. Enable it in App Settings.");
+    }
+
+    // Get current location
+    Position position = await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.high,
+    );
+
+    // Convert to city name
+    List<geo.Placemark> placemarks =
+    await geo.placemarkFromCoordinates(
+      position.latitude,
+      position.longitude,
+    );
+
+geo.Placemark place = placemarks.first;
+
+    if (!mounted) return;
+
+    setState(() {
+      _currentCity =
+          place.locality ??
+          place.subAdministrativeArea ??
+          place.administrativeArea ??
+          "Unknown Location";
+
+      _lastUpdated =
+          "Updated today · ${TimeOfDay.now().format(context)}";
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          "Current location: $_currentCity",
+        ),
+      ),
+    );
+  } catch (e) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text("Location Error: $e"),
+      ),
+    );
+  } finally {
+    if (mounted) {
+      setState(() {
+        _locatingGps = false;
+      });
     }
   }
+}
+
+@override
+void initState() {
+  super.initState();
+
+  _handleAutoGps();
+
+  Geolocator.getServiceStatusStream().listen((ServiceStatus status) {
+    if (status == ServiceStatus.enabled) {
+      _handleAutoGps();
+    }
+  });
+}
 
   @override
   Widget build(BuildContext context) {
@@ -404,43 +415,53 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildHeader() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Current Location',
-          style: TextStyle(fontSize: 16, color: Colors.white70),
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const Text(
+        'Current Location',
+        style: TextStyle(
+          fontSize: 16,
+          color: Colors.white70,
         ),
-        const SizedBox(height: 8),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
-                  Text(
-                    'San Francisco, CA',
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                    ),
+      ),
+      const SizedBox(height: 8),
+      Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _currentCity,
+                  style: const TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
                   ),
-                  SizedBox(height: 4),
-                  Text(
-                    'Updated today · 9:45 AM',
-                    style: TextStyle(fontSize: 14, color: Colors.white60),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _lastUpdated,
+                  style: const TextStyle(
+                    color: Colors.white60,
+                    fontSize: 14,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-            const Icon(Icons.location_on, color: Colors.white70, size: 28),
-          ],
-        ),
-      ],
-    );
-  }
+          ),
+          const Icon(
+            Icons.location_on,
+            color: Colors.white70,
+            size: 28,
+          ),
+        ],
+      ),
+    ],
+  );
+}
 
    Widget _buildLocationActions(BuildContext context) {
     return Row(
