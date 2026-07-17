@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart' as geo;
+import 'dart:async';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -251,6 +252,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _locatingGps = false;
   String _currentCity = "Detecting...";
   String _lastUpdated = "";
+  StreamSubscription<ServiceStatus>? _serviceStatusSub; // add this
 
   static const details = [
     {'label': 'Humidity', 'value': '72%', 'icon': Icons.water_drop},
@@ -374,15 +376,21 @@ geo.Placemark place = placemarks.first;
 void initState() {
   super.initState();
 
+
+
   _handleAutoGps();
 
-  Geolocator.getServiceStatusStream().listen((ServiceStatus status) {
-    if (status == ServiceStatus.enabled) {
-      _handleAutoGps();
-    }
-  });
+  _serviceStatusSub = Geolocator.getServiceStatusStream().listen((ServiceStatus status) {
+  if (status == ServiceStatus.enabled) {
+    _handleAutoGps();
+  }
+});
 }
-
+@override
+void dispose() {
+  _serviceStatusSub?.cancel();
+  super.dispose();
+}
   @override
   Widget build(BuildContext context) {
     return Container(
