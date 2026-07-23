@@ -5,6 +5,27 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart' as geo;
 import 'dart:async';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+
+class LocationController extends ChangeNotifier {
+  String city = "Detecting...";
+  String lastUpdated = "";
+  bool locating = false;
+
+  void setCity(String newCity, String updatedTime) {
+    city = newCity;
+    lastUpdated = updatedTime;
+    notifyListeners();
+  }
+
+  void setLocating(bool value) {
+    locating = value;
+    notifyListeners();
+  }
+}
+
+final LocationController locationController = LocationController();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -43,7 +64,7 @@ class _WeatherAppState extends State<WeatherApp> {
       final currentUser = _auth?.currentUser;
       if (mounted) {
         setState(() {
-          _isSignedIn = currentUser != null;
+           _isSignedIn = true;
           _isCheckingAuth = false;
         });
       }
@@ -98,7 +119,9 @@ class _WeatherAppState extends State<WeatherApp> {
         scaffoldBackgroundColor: const Color(0xFF0B1330),
         textTheme: Typography.whiteMountainView,
       ),
+      // home: _isSignedIn ? const WeatherHomePage() : _buildSignInGate(),
       home: const WeatherHomePage(),
+
     );
   }
 
@@ -204,10 +227,10 @@ class WeatherHomePage extends StatefulWidget {
 class _WeatherHomePageState extends State<WeatherHomePage> {
   int _currentIndex = 0;
 
-  static const List<Widget> _pages = <Widget>[
-    HomeScreen(),
-    SearchScreen(),
-    HistoryScreen(),
+  late final List<Widget> _pages = [
+    HomeScreen(controller: locationController),
+    SearchScreen(controller: locationController),
+    const HistoryScreen(),
   ];
 
   @override
@@ -243,16 +266,15 @@ class _WeatherHomePageState extends State<WeatherHomePage> {
 }
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final LocationController controller;
+  const HomeScreen({super.key, required this.controller});
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  bool _locatingGps = false;
-  String _currentCity = "Detecting...";
-  String _lastUpdated = "";
-  StreamSubscription<ServiceStatus>? _serviceStatusSub; // add this
+  StreamSubscription<ServiceStatus>? _serviceStatusSub;
+  LocationController get _ctrl => widget.controller;
 
   static const details = [
     {'label': 'Humidity', 'value': '72%', 'icon': Icons.water_drop},
@@ -285,200 +307,173 @@ class _HomeScreenState extends State<HomeScreen> {
     return '$weekday · ${now.month}/${now.day}/${now.year}';
   }
 
-    Future<void> _handleAutoGps() async {
-  if (_locatingGps) return;
+  Future<void> _handleAutoGps() async {
+    if (_ctrl.locating) return;
+    _ctrl.setLocating(true);
 
-  setState(() {
-    _locatingGps = true;
-  });
-
-  try {
-    // Check whether GPS is enabled
-    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-
-    if (!serviceEnabled) {
-      await Geolocator.openLocationSettings();
-
-      // Wait until the user turns GPS on
-      while (!await Geolocator.isLocationServiceEnabled()) {
-        await Future.delayed(const Duration(seconds: 1));
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        await Geolocator.openLocationSettings();
+        while (!await Geolocator.isLocationServiceEnabled()) {
+          await Future.delayed(const Duration(seconds: 1));
+        }
       }
-    }
 
-    // Check permission
-    LocationPermission permission = await Geolocator.checkPermission();
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied) {
+        throw Exception("Location permission denied.");
+      }
+      if (permission == LocationPermission.deniedForever) {
+        throw Exception("Location permission permanently denied.");
+      }
 
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-    }
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+      List<geo.Placemark> placemarks = await geo.placemarkFromCoordinates(
+        position.latitude, position.longitude,
+      );
+      geo.Placemark place = placemarks.first;
 
-    if (permission == LocationPermission.denied) {
-      throw Exception("Location permission denied.");
-    }
+      if (!mounted) return;
 
-    if (permission == LocationPermission.deniedForever) {
-      throw Exception(
-          "Location permission permanently denied. Enable it in App Settings.");
-    }
+      _ctrl.setCity(
+        place.locality ??
+        place.subAdministrativeArea ??
+        place.administrativeArea ??
+        "Unknown Location",
+        "Updated today · ${TimeOfDay.now().format(context)}",
+      );
 
-    // Get current location
-    Position position = await Geolocator.getCurrentPosition(
-      desiredAccuracy: LocationAccuracy.high,
-    );
-
-    // Convert to city name
-    List<geo.Placemark> placemarks =
-    await geo.placemarkFromCoordinates(
-      position.latitude,
-      position.longitude,
-    );
-
-geo.Placemark place = placemarks.first;
-
-    if (!mounted) return;
-
-    setState(() {
-      _currentCity =
-          place.locality ??
-          place.subAdministrativeArea ??
-          place.administrativeArea ??
-          "Unknown Location";
-
-      _lastUpdated =
-          "Updated today · ${TimeOfDay.now().format(context)}";
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          "Current location: $_currentCity",
-        ),
-      ),
-    );
-  } catch (e) {
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text("Location Error: $e"),
-      ),
-    );
-  } finally {
-    if (mounted) {
-      setState(() {
-        _locatingGps = false;
-      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Current location: ${_ctrl.city}")),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Location Error: $e")),
+      );
+    } finally {
+      _ctrl.setLocating(false);
     }
   }
-}
 
-@override
-void initState() {
-  super.initState();
+  @override
+  void initState() {
+    super.initState();
 
-
-
-  _handleAutoGps();
-
-  _serviceStatusSub = Geolocator.getServiceStatusStream().listen((ServiceStatus status) {
-  if (status == ServiceStatus.enabled) {
     _handleAutoGps();
+
+    _serviceStatusSub = Geolocator.getServiceStatusStream().listen((ServiceStatus status) {
+      if (status == ServiceStatus.enabled) {
+        _handleAutoGps();
+      }
+    });
   }
-});
-}
-@override
-void dispose() {
-  _serviceStatusSub?.cancel();
-  super.dispose();
-}
+
+  @override
+  void dispose() {
+    _serviceStatusSub?.cancel();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Color(0xFF0A152F), Color(0xFF0B193E)],
-        ),
-      ),
-      child: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-        children: [
-          const SizedBox(height: 6),
-          _buildHeader(),
-          const SizedBox(height: 20),
-          _buildLocationActions(context),
-          const SizedBox(height: 24),
-          _buildCurrentWeatherCard(),
-          const SizedBox(height: 24),
-          _buildWeatherDetails(),
-          const SizedBox(height: 24),
-          _buildForecastSection(),
-          const SizedBox(height: 24),
-          _buildExtendedForecast(),
-          const SizedBox(height: 20),
-        ],
-      ),
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (context, _) {
+        return Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xFF0A152F), Color(0xFF0B193E)],
+            ),
+          ),
+          child: ListView(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+            children: [
+              const SizedBox(height: 6),
+              _buildHeader(),
+              const SizedBox(height: 20),
+              _buildLocationActions(context),
+              const SizedBox(height: 24),
+              _buildCurrentWeatherCard(),
+              const SizedBox(height: 24),
+              _buildWeatherDetails(),
+              const SizedBox(height: 24),
+              _buildForecastSection(),
+              const SizedBox(height: 24),
+              _buildExtendedForecast(),
+              const SizedBox(height: 20),
+            ],
+          ),
+        );
+      },
     );
   }
 
   Widget _buildHeader() {
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      const Text(
-        'Current Location',
-        style: TextStyle(
-          fontSize: 16,
-          color: Colors.white70,
-        ),
-      ),
-      const SizedBox(height: 8),
-      Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _currentCity,
-                  style: const TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  _lastUpdated,
-                  style: const TextStyle(
-                    color: Colors.white60,
-                    fontSize: 14,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const Icon(
-            Icons.location_on,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Current Location',
+          style: TextStyle(
+            fontSize: 16,
             color: Colors.white70,
-            size: 28,
           ),
-        ],
-      ),
-    ],
-  );
-}
+        ),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _ctrl.city,
+                    style: const TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _ctrl.lastUpdated,
+                    style: const TextStyle(
+                      color: Colors.white60,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.location_on,
+              color: Colors.white70,
+              size: 28,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
 
-   Widget _buildLocationActions(BuildContext context) {
+  Widget _buildLocationActions(BuildContext context) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         _actionButton(
           context,
-          _locatingGps ? Icons.hourglass_top : Icons.gps_fixed,
-          _locatingGps ? 'Locating…' : 'Auto GPS',
+          _ctrl.locating ? Icons.hourglass_top : Icons.gps_fixed,
+          _ctrl.locating ? 'Locating...' : 'Auto GPS',
           onTap: _handleAutoGps,
         ),
         _actionButton(context, Icons.search, 'Search City'),
@@ -487,49 +482,49 @@ void dispose() {
   }
 
   Widget _actionButton(
-  BuildContext context,
-  IconData icon,
-  String label, {
-  VoidCallback? onTap,
-}) {
-  return Expanded(
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(22),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
-          decoration: BoxDecoration(
-            color: const Color.fromRGBO(255, 255, 255, 0.08),
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(
+    BuildContext context,
+    IconData icon,
+    String label, {
+    VoidCallback? onTap,
+  }) {
+    return Expanded(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(22),
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
+            decoration: BoxDecoration(
               color: const Color.fromRGBO(255, 255, 255, 0.08),
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(
+                color: const Color.fromRGBO(255, 255, 255, 0.08),
+              ),
             ),
-          ),
-          child: Column(
-            children: [
-              Icon(
-                icon,
-                color: Theme.of(context).colorScheme.primary,
-                size: 24,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                label,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Colors.white70,
+            child: Column(
+              children: [
+                Icon(
+                  icon,
+                  color: Theme.of(context).colorScheme.primary,
+                  size: 24,
                 ),
-              ),
-            ],
+                const SizedBox(height: 8),
+                Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.white70,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   Widget _buildCurrentWeatherCard() {
     return Container(
@@ -615,7 +610,7 @@ void dispose() {
     );
   }
 
- Widget _metricTile(String label, String value) {
+  Widget _metricTile(String label, String value) {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.all(14),
@@ -646,7 +641,7 @@ void dispose() {
     );
   }
 
-    Widget _buildWeatherDetails() {
+  Widget _buildWeatherDetails() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -969,125 +964,338 @@ class _TrendPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-class SearchScreen extends StatelessWidget {
-  const SearchScreen({super.key});
-
-  static const recentLocations = ['New York', 'London', 'Tokyo'];
-  static const suggestions = ['Paris', 'Los Angeles', 'Sydney', 'Mumbai'];
+class SearchScreen extends StatefulWidget {
+  final LocationController controller;
+  const SearchScreen({super.key, required this.controller});
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFF0B193E), Color(0xFF091225)],
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
+  State<SearchScreen> createState() => _SearchScreenState();
+}
+
+class _SearchScreenState extends State<SearchScreen> {
+  final TextEditingController _searchController = TextEditingController();
+  final List<String> _recentLocations = ['New York', 'London', 'Tokyo'];
+  List<String> _searchResults = [];
+  bool _isSearching = false;
+  bool _locatingGps = false;   // ← ADD THIS LINE
+
+  LocationController get _ctrl => widget.controller;
+
+  @override
+void initState() {
+  super.initState();
+  // REMOVE: _filtered = [...];
+  _searchController.addListener(_onSearchChanged);
+}
+
+  @override
+  void dispose() {
+    _searchController.removeListener(_onSearchChanged);
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _onSearchChanged() {
+  final query = _searchController.text.trim();
+  if (query.length < 2) {
+    setState(() => _searchResults = []);
+    return;
+  }
+  _searchCities(query);
+}
+
+Future<void> _searchCities(String query) async {
+  setState(() => _isSearching = true);
+  try {
+    // Uses OpenStreetMap Nominatim — free, no API key needed
+    final uri = Uri.parse(
+      'https://nominatim.openstreetmap.org/search'
+      '?q=${Uri.encodeComponent(query)}'
+      '&format=json'
+      '&addressdetails=1'
+      '&limit=8'
+      '&featuretype=city',
+    );
+    final response = await http.get(uri, headers: {
+      'Accept-Language': 'en',
+      'User-Agent': 'WeatherApp/1.0',
+    });
+
+    if (!mounted) return;
+
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      setState(() {
+        _searchResults = data.map<String>((item) {
+          final address = item['address'] as Map<String, dynamic>? ?? {};
+          final city = address['city'] ??
+              address['town'] ??
+              address['village'] ??
+              address['county'] ??
+              item['display_name'] ??
+              '';
+          final country = address['country'] ?? '';
+          return country.isNotEmpty ? '$city, $country' : city as String;
+        }).where((c) => c.isNotEmpty).toSet().toList();
+      });
+    }
+  } catch (e) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Search error: $e')),
+      );
+    }
+  } finally {
+    if (mounted) setState(() => _isSearching = false);
+  }
+}
+
+  void _selectCity(String city) {
+    if (!_recentLocations.contains(city)) {
+      setState(() => _recentLocations.insert(0, city));
+    }
+    _ctrl.setCity(
+      city,
+      "Updated today · ${TimeOfDay.now().format(context)}",
+    );
+    _searchController.clear();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.location_on, color: Colors.white, size: 18),
+            const SizedBox(width: 8),
+            Text('Switched to $city'),
+          ],
         ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Search City',
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.w800,
-              color: Colors.white,
-            ),
-          ),
-          const SizedBox(height: 10),
-          const Text(
-            'Find weather for any location quickly',
-            style: TextStyle(fontSize: 14, color: Colors.white70),
-          ),
-          const SizedBox(height: 24),
-          Container(
-            decoration: BoxDecoration(
-              color: Color.fromRGBO(255, 255, 255, 0.08),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: Color.fromRGBO(255, 255, 255, 0.1)),
-            ),
-            child: const TextField(
-              style: TextStyle(color: Colors.white),
-              cursorColor: Colors.white,
-              decoration: InputDecoration(
-                prefixIcon: Icon(Icons.search, color: Colors.white70),
-                hintText: 'Search city name',
-                hintStyle: TextStyle(color: Colors.white54),
-                border: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(vertical: 18),
-              ),
-            ),
-          ),
-          const SizedBox(height: 28),
-          const Text(
-            'Recent locations',
-            style: TextStyle(
-              color: Colors.white70,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: recentLocations
-                .map(
-                  (location) => Chip(
-                    label: Text(
-                      location,
-                      style: const TextStyle(color: Colors.white),
-                    ),
-                    backgroundColor: Color.fromRGBO(255, 255, 255, 0.08),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 8,
-                    ),
-                  ),
-                )
-                .toList(),
-          ),
-          const SizedBox(height: 28),
-          const Text(
-            'Suggested cities',
-            style: TextStyle(
-              color: Colors.white70,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Column(
-            children: suggestions
-                .map(
-                  (city) => Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    decoration: BoxDecoration(
-                      color: Color.fromRGBO(255, 255, 255, 0.06),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Color.fromRGBO(255, 255, 255, 0.08)),
-                    ),
-                    child: ListTile(
-                      title: Text(
-                        city,
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                      trailing: const Icon(
-                        Icons.keyboard_arrow_right,
-                        color: Colors.white70,
-                      ),
-                    ),
-                  ),
-                )
-                .toList(),
-          ),
-        ],
+        backgroundColor: const Color(0xFF4A90E2),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
   }
+
+  Future<void> _useCurrentLocation() async {
+    if (_locatingGps) return;
+    setState(() => _locatingGps = true);
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        await Geolocator.openLocationSettings();
+        while (!await Geolocator.isLocationServiceEnabled()) {
+          await Future.delayed(const Duration(seconds: 1));
+        }
+      }
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        throw Exception("Location permission denied.");
+      }
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+      final placemarks = await geo.placemarkFromCoordinates(
+        position.latitude, position.longitude,
+      );
+      final place = placemarks.first;
+      final cityName = place.locality ??
+          place.subAdministrativeArea ??
+          place.administrativeArea ??
+          "Unknown Location";
+      if (!mounted) return;
+      _selectCity(cityName);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Location Error: $e")),
+      );
+    } finally {
+      if (mounted) setState(() => _locatingGps = false);
+    }
+  }
+
+  @override
+Widget build(BuildContext context) {
+  return AnimatedBuilder(
+    animation: _ctrl,
+    builder: (context, _) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFF0B193E), Color(0xFF091225)],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Search City',
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: Colors.white)),
+            const SizedBox(height: 10),
+            const Text('Find weather for any location quickly',
+                style: TextStyle(fontSize: 14, color: Colors.white70)),
+            const SizedBox(height: 20),
+
+            // Search input
+            Container(
+              decoration: BoxDecoration(
+                color: Color.fromRGBO(255, 255, 255, 0.08),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: Color.fromRGBO(255, 255, 255, 0.1)),
+              ),
+              child: TextField(
+                controller: _searchController,
+                style: const TextStyle(color: Colors.white),
+                cursorColor: Colors.white,
+                decoration: InputDecoration(
+                  prefixIcon: const Icon(Icons.search, color: Colors.white70),
+                  suffixIcon: _searchController.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, color: Colors.white54),
+                          onPressed: () => _searchController.clear(),
+                        )
+                      : null,
+                  hintText: 'Search city name',
+                  hintStyle: const TextStyle(color: Colors.white54),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 18),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Use Current Location button
+            GestureDetector(
+              onTap: _useCurrentLocation,
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 18),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF4A90E2).withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: const Color(0xFF4A90E2).withOpacity(0.5)),
+                ),
+                child: Row(
+                  children: [
+                    _locatingGps
+                        ? const SizedBox(
+                            width: 20, height: 20,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Color(0xFF4A90E2)),
+                          )
+                        : const Icon(Icons.my_location, color: Color(0xFF4A90E2), size: 20),
+                    const SizedBox(width: 12),
+                    Text(
+                      _locatingGps ? 'Detecting location...' : 'Use Current Location',
+                      style: const TextStyle(
+                        color: Color(0xFF4A90E2),
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // Recent locations
+            const Text('Recent locations',
+                style: TextStyle(color: Colors.white70, fontSize: 16, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 12, runSpacing: 12,
+              children: _recentLocations.map((loc) => GestureDetector(
+                onTap: () => _selectCity(loc),
+                child: Chip(
+                  avatar: const Icon(Icons.history, size: 16, color: Colors.white70),
+                  label: Text(loc, style: const TextStyle(color: Colors.white)),
+                  backgroundColor: Color.fromRGBO(255, 255, 255, 0.08),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                ),
+              )).toList(),
+            ),
+            const SizedBox(height: 24),
+
+            // Results or empty state
+            if (_searchController.text.isNotEmpty) ...[
+              Row(
+                children: [
+                  const Text('Results',
+                      style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600)),
+                  if (_isSearching) ...[
+                    const SizedBox(width: 12),
+                    const SizedBox(
+                      width: 16, height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white54),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: _searchResults.isEmpty
+                    ? Center(
+                        child: Text(
+                          _isSearching
+                              ? 'Searching...'
+                              : 'No cities found. Try a different name.',
+                          style: const TextStyle(color: Colors.white54),
+                        ),
+                      )
+                    : ListView.separated(
+                        itemCount: _searchResults.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 10),
+                        itemBuilder: (context, index) {
+                          final city = _searchResults[index];
+                          return GestureDetector(
+                            onTap: () => _selectCity(city),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: Color.fromRGBO(255, 255, 255, 0.06),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                    color: Color.fromRGBO(255, 255, 255, 0.08)),
+                              ),
+                              child: ListTile(
+                                leading: const Icon(Icons.location_city,
+                                    color: Colors.white54, size: 20),
+                                title: Text(city,
+                                    style: const TextStyle(color: Colors.white)),
+                                trailing: const Icon(Icons.keyboard_arrow_right,
+                                    color: Colors.white70),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ] else ...[
+              const SizedBox(height: 8),
+              const Expanded(
+                child: Center(
+                  child: Text(
+                    'Type a city name to search worldwide',
+                    style: TextStyle(color: Colors.white38, fontSize: 14),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      );
+    },
+  );
+} 
 }
 
 class HistoryScreen extends StatelessWidget {
