@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart' as geo;
-import 'dart:async';
+// import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
@@ -228,10 +228,13 @@ class _WeatherHomePageState extends State<WeatherHomePage> {
   int _currentIndex = 0;
 
   late final List<Widget> _pages = [
-    HomeScreen(controller: locationController),
-    SearchScreen(controller: locationController),
-    const HistoryScreen(),
-  ];
+  HomeScreen(controller: locationController),
+  SearchScreen(
+    controller: locationController,
+    onCitySelected: () => setState(() => _currentIndex = 0), // navigate to home
+  ),
+  const HistoryScreen(),
+];
 
   @override
   Widget build(BuildContext context) {
@@ -273,7 +276,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  StreamSubscription<ServiceStatus>? _serviceStatusSub;
+  // StreamSubscription<ServiceStatus>? _serviceStatusSub;
   LocationController get _ctrl => widget.controller;
 
   static const details = [
@@ -363,23 +366,15 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   @override
-  void initState() {
-    super.initState();
+void initState() {
+  super.initState();
+  // GPS is optional — user taps button to activate
+}
 
-    _handleAutoGps();
-
-    _serviceStatusSub = Geolocator.getServiceStatusStream().listen((ServiceStatus status) {
-      if (status == ServiceStatus.enabled) {
-        _handleAutoGps();
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _serviceStatusSub?.cancel();
-    super.dispose();
-  }
+@override
+void dispose() {
+  super.dispose();
+}
 
   @override
   Widget build(BuildContext context) {
@@ -421,9 +416,9 @@ class _HomeScreenState extends State<HomeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Current Location',
-          style: TextStyle(
+                Text(
+          _ctrl.city == 'Detecting...' ? 'Select a location' : 'Current Location',
+          style: const TextStyle(
             fontSize: 16,
             color: Colors.white70,
           ),
@@ -473,8 +468,8 @@ class _HomeScreenState extends State<HomeScreen> {
         _actionButton(
           context,
           _ctrl.locating ? Icons.hourglass_top : Icons.gps_fixed,
-          _ctrl.locating ? 'Locating...' : 'Auto GPS',
-          onTap: _handleAutoGps,
+          _ctrl.locating ? 'Locating...' : 'Use GPS',       
+           onTap: _handleAutoGps,
         ),
         _actionButton(context, Icons.search, 'Search City'),
       ],
@@ -966,7 +961,12 @@ class _TrendPainter extends CustomPainter {
 
 class SearchScreen extends StatefulWidget {
   final LocationController controller;
-  const SearchScreen({super.key, required this.controller});
+  final VoidCallback? onCitySelected;   // ADD
+  const SearchScreen({
+    super.key,
+    required this.controller,
+    this.onCitySelected,                // ADD
+  });
 
   @override
   State<SearchScreen> createState() => _SearchScreenState();
@@ -1051,29 +1051,30 @@ Future<void> _searchCities(String query) async {
 }
 
   void _selectCity(String city) {
-    if (!_recentLocations.contains(city)) {
-      setState(() => _recentLocations.insert(0, city));
-    }
-    _ctrl.setCity(
-      city,
-      "Updated today · ${TimeOfDay.now().format(context)}",
-    );
-    _searchController.clear();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.location_on, color: Colors.white, size: 18),
-            const SizedBox(width: 8),
-            Text('Switched to $city'),
-          ],
-        ),
-        backgroundColor: const Color(0xFF4A90E2),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    );
+  if (!_recentLocations.contains(city)) {
+    setState(() => _recentLocations.insert(0, city));
   }
+  _ctrl.setCity(
+    city,
+    "Updated today · ${TimeOfDay.now().format(context)}",
+  );
+  _searchController.clear();
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Row(
+        children: [
+          const Icon(Icons.location_on, color: Colors.white, size: 18),
+          const SizedBox(width: 8),
+          Text('Switched to $city'),
+        ],
+      ),
+      backgroundColor: const Color(0xFF4A90E2),
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    ),
+  );
+  widget.onCitySelected?.call();   // ADD — navigates to home
+}
 
   Future<void> _useCurrentLocation() async {
     if (_locatingGps) return;
